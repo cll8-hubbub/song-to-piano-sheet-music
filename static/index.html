@@ -461,7 +461,7 @@ document.getElementById("search-btn").addEventListener("click", async () => {
   resultsEl.innerHTML = "<p class='warning'>Searching…</p>";
   selectedTrackUrl = null;
 
-  const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+  const res = await fetch(`api/search?q=${encodeURIComponent(query)}`);
   const data = await res.json();
   if (data.error) {
     resultsEl.innerHTML = `<p class='warning'>Error: ${data.error}</p>`;
@@ -510,7 +510,7 @@ document.getElementById("transcribe-btn").addEventListener("click", async () => 
   document.getElementById("transcribe-btn").disabled = true;
   statusLine.textContent = "Uploading…";
 
-  const res = await fetch("/api/transcribe", { method: "POST", body: formData });
+  const res = await fetch("api/transcribe", { method: "POST", body: formData });
   const data = await res.json();
   if (data.error) {
     statusLine.textContent = "Error: " + data.error;
@@ -523,7 +523,7 @@ document.getElementById("transcribe-btn").addEventListener("click", async () => 
 
 async function pollStatus() {
   const statusLine = document.getElementById("status-line");
-  const res = await fetch(`/api/status/${currentJobId}`);
+  const res = await fetch(`api/status/${currentJobId}`);
   const data = await res.json();
 
   if (data.status === "done") {
@@ -532,7 +532,7 @@ async function pollStatus() {
     document.getElementById("controls-panel").style.display = "block";
     document.getElementById("listen-panel").style.display = "block";
     ["easy", "medium", "hard"].forEach(diff => {
-      document.getElementById(`player-${diff}`).src = `/api/preview/${currentJobId}/${diff}`;
+      document.getElementById(`player-${diff}`).src = `api/preview/${currentJobId}/${diff}`;
     });
     await rerender();
   } else if (data.status === "error") {
@@ -556,7 +556,7 @@ async function rerender() {
   formData.append("accidental_mode", document.getElementById("accidental-mode").value);
   formData.append("show_note_names", document.getElementById("show-note-names").checked);
 
-  const res = await fetch(`/api/render/${currentJobId}`, { method: "POST", body: formData });
+  const res = await fetch(`api/render/${currentJobId}`, { method: "POST", body: formData });
   const data = await res.json();
   if (data.error) {
     statusLine.textContent = "Error: " + data.error;

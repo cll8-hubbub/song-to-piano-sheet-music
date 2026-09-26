@@ -133,7 +133,7 @@ async def render(
     return {
         "svg": svg_path.read_text(),
         "pages": n_pages,
-        "pdf_url": f"/api/download/{job_id}",
+        "pdf_url": f"api/download/{job_id}",
     }
 
 
