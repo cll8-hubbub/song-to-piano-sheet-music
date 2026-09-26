@@ -68,7 +68,7 @@ def ensure_job_loaded(job_id: str) -> bool:
     if not midi_path.exists():
         return False
 
-    events = p.extract_note_events(midi_path)
+    events, bpm = p.extract_note_events(midi_path)
     meta = {}
     meta_path = d / "meta.json"
     if meta_path.exists():
@@ -78,12 +78,12 @@ def ensure_job_loaded(job_id: str) -> bool:
         except (json.JSONDecodeError, OSError):
             pass
 
-    jobs[job_id] = {"status": "done", "events": events, "meta": meta}
+    jobs[job_id] = {"status": "done", "events": events, "bpm": bpm, "meta": meta}
 
     for difficulty in ("easy", "medium", "hard"):
         preview_path = d / f"preview_{difficulty}.mid"
         if not preview_path.exists():
-            preview_score = p.arrange_for_piano(events, difficulty)
+            preview_score = p.arrange_for_piano(events, difficulty, bpm)
             preview_score.write("midi", fp=str(preview_path))
 
     return True
@@ -111,15 +111,16 @@ def run_pipeline(job_id: str, source_type: str, source_value: str):
         midi_path = d / "transcribed.mid"
         p.transcribe_to_midi(stem_wav, midi_path)
 
-        events = p.extract_note_events(midi_path)
+        events, bpm = p.extract_note_events(midi_path)
         if not events:
             raise RuntimeError("No notes were detected in this audio.")
 
         jobs[job_id]["events"] = events
+        jobs[job_id]["bpm"] = bpm
 
         jobs[job_id]["status"] = "generating difficulty previews"
         for difficulty in ("easy", "medium", "hard"):
-            preview_score = p.arrange_for_piano(events, difficulty)
+            preview_score = p.arrange_for_piano(events, difficulty, bpm)
             preview_score.write("midi", fp=str(d / f"preview_{difficulty}.mid"))
 
         jobs[job_id]["status"] = "done"
@@ -230,7 +231,8 @@ async def render(
     j = jobs[job_id]
 
     events = j["events"]
-    score = p.arrange_for_piano(events, difficulty)
+    bpm = j.get("bpm", 120.0)
+    score = p.arrange_for_piano(events, difficulty, bpm)
     analyzed_key = p.detect_and_apply_key_signature(score)
     score.makeNotation(inPlace=True)
     p.apply_key_signature_labels(score, analyzed_key, label_key_signature)

@@ -16,7 +16,7 @@ from pathlib import Path
 
 import imageio_ffmpeg
 import verovio
-from music21 import chord, clef, converter, key, meter, note, pitch, stream
+from music21 import chord, clef, key, meter, note, pitch, stream, tempo
 from reportlab.graphics import renderPDF
 from reportlab.pdfgen import canvas as pdfcanvas
 from svglib.svglib import svg2rlg
@@ -157,21 +157,33 @@ def _grid_size(divisor: float) -> float:
     return 1.0 / divisor
 
 
-def extract_note_events(midi_path: Path) -> list[tuple[float, float, int, int]]:
-    """Returns (start_ql, end_ql, midi_pitch, velocity) in quarter-length
-    units at the score's tempo, by parsing through music21 (which handles
-    the tempo map for us)."""
-    score = converter.parse(str(midi_path))
+def extract_note_events(midi_path: Path) -> tuple[list[tuple[float, float, int, int]], float]:
+    """Returns ((start_ql, end_ql, midi_pitch, velocity) events, estimated_bpm).
+
+    Reads pretty_midi's raw note timing directly in seconds rather than going
+    through music21's tempo-relative parsing: basic-pitch always tags its
+    MIDI output with a flat placeholder 120bpm that has no relation to the
+    actual song, so quantizing notation against that would misalign every
+    note against the song's real beat. We estimate the real tempo from the
+    detected notes themselves and build the quarter-length axis from that
+    instead, so the notation grid (and difficulty quantization) actually
+    lines up with the song's real pulse."""
+    import pretty_midi
+
+    pm = pretty_midi.PrettyMIDI(str(midi_path))
+    bpm = pm.estimate_tempo()
+    if not bpm or bpm <= 0 or bpm != bpm:  # nan guard
+        bpm = 120.0
+    seconds_to_ql = bpm / 60.0
+
     events = []
-    for n in score.flatten().notes:
-        pitches = n.pitches if hasattr(n, "pitches") else [n.pitch]
-        vel = getattr(n.volume, "velocity", None) or 80
-        for p in pitches:
-            events.append((float(n.offset), float(n.offset + n.duration.quarterLength), p.midi, vel))
-    return events
+    for instrument in pm.instruments:
+        for n in instrument.notes:
+            events.append((n.start * seconds_to_ql, n.end * seconds_to_ql, n.pitch, n.velocity))
+    return events, bpm
 
 
-def arrange_for_piano(events: list[tuple[float, float, int, int]], difficulty: str) -> stream.Score:
+def arrange_for_piano(events: list[tuple[float, float, int, int]], difficulty: str, bpm: float = 120.0) -> stream.Score:
     settings = DIFFICULTY_SETTINGS[difficulty]
     rh_grid = _grid_size(settings["grid_divisor"])
     lh_grid = _grid_size(settings["lh_grid_divisor"])
@@ -187,6 +199,7 @@ def arrange_for_piano(events: list[tuple[float, float, int, int]], difficulty: s
     lh_part.insert(0, clef.BassClef())
     rh_part.insert(0, meter.TimeSignature("4/4"))
     lh_part.insert(0, meter.TimeSignature("4/4"))
+    rh_part.insert(0, tempo.MetronomeMark(number=round(bpm)))
     score.insert(0, rh_part)
     score.insert(0, lh_part)
     return score
