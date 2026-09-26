@@ -113,6 +113,30 @@ def acquire_audio_from_url(url: str, out_wav: Path) -> dict:
     return metadata
 
 
+def estimate_tempo_from_audio(wav_path: Path) -> float:
+    """Beat-tracks the actual audio waveform -- kept from before drum
+    removal, since percussive transients are the strongest tempo cue --
+    rather than guessing from MIDI note patterns alone. More robust
+    against the octave errors (mistaking double or half the real tempo)
+    that simple note-onset heuristics are prone to."""
+    import librosa
+
+    try:
+        y, sr = librosa.load(str(wav_path), sr=None, mono=True)
+        tempo, _ = librosa.beat.beat_track(y=y, sr=sr)
+        bpm = float(tempo)
+    except Exception:
+        return 120.0
+    if bpm <= 0:
+        return 120.0
+    # Nudge octave-doubled/halved estimates toward a typical song tempo range.
+    while bpm < 70:
+        bpm *= 2
+    while bpm > 180:
+        bpm /= 2
+    return bpm
+
+
 def convert_to_wav(src_path: Path, out_wav: Path) -> None:
     cmd = [FFMPEG_PATH, "-y", "-i", str(src_path), "-ac", "1", "-ar", "44100", str(out_wav)]
     result = subprocess.run(cmd, capture_output=True, text=True)
@@ -157,30 +181,25 @@ def _grid_size(divisor: float) -> float:
     return 1.0 / divisor
 
 
-def extract_note_events(midi_path: Path) -> tuple[list[tuple[float, float, int, int]], float]:
-    """Returns ((start_ql, end_ql, midi_pitch, velocity) events, estimated_bpm).
-
-    Reads pretty_midi's raw note timing directly in seconds rather than going
-    through music21's tempo-relative parsing: basic-pitch always tags its
-    MIDI output with a flat placeholder 120bpm that has no relation to the
-    actual song, so quantizing notation against that would misalign every
-    note against the song's real beat. We estimate the real tempo from the
-    detected notes themselves and build the quarter-length axis from that
-    instead, so the notation grid (and difficulty quantization) actually
-    lines up with the song's real pulse."""
+def extract_note_events(midi_path: Path, bpm: float) -> list[tuple[float, float, int, int]]:
+    """Returns (start_ql, end_ql, midi_pitch, velocity) in quarter-length
+    units, using the given real tempo (estimated from the actual audio via
+    estimate_tempo_from_audio) to build the axis. Reads pretty_midi's raw
+    note timing directly in seconds rather than going through music21's
+    tempo-relative parsing: basic-pitch always tags its MIDI output with a
+    flat placeholder 120bpm that has no relation to the actual song, so
+    quantizing notation against that would misalign every note against the
+    song's real beat."""
     import pretty_midi
 
     pm = pretty_midi.PrettyMIDI(str(midi_path))
-    bpm = pm.estimate_tempo()
-    if not bpm or bpm <= 0 or bpm != bpm:  # nan guard
-        bpm = 120.0
     seconds_to_ql = bpm / 60.0
 
     events = []
     for instrument in pm.instruments:
         for n in instrument.notes:
             events.append((n.start * seconds_to_ql, n.end * seconds_to_ql, n.pitch, n.velocity))
-    return events, bpm
+    return events
 
 
 def arrange_for_piano(events: list[tuple[float, float, int, int]], difficulty: str, bpm: float = 120.0) -> stream.Score:

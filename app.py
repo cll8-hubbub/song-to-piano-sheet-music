@@ -68,7 +68,6 @@ def ensure_job_loaded(job_id: str) -> bool:
     if not midi_path.exists():
         return False
 
-    events, bpm = p.extract_note_events(midi_path)
     meta = {}
     meta_path = d / "meta.json"
     if meta_path.exists():
@@ -78,6 +77,12 @@ def ensure_job_loaded(job_id: str) -> bool:
         except (json.JSONDecodeError, OSError):
             pass
 
+    bpm = meta.get("bpm")
+    if not bpm:
+        raw_wav = d / "input.wav"
+        bpm = p.estimate_tempo_from_audio(raw_wav) if raw_wav.exists() else 120.0
+
+    events = p.extract_note_events(midi_path, bpm)
     jobs[job_id] = {"status": "done", "events": events, "bpm": bpm, "meta": meta}
 
     for difficulty in ("easy", "medium", "hard"):
@@ -104,6 +109,11 @@ def run_pipeline(job_id: str, source_type: str, source_value: str):
             src_path = Path(source_value)
             p.convert_to_wav(src_path, raw_wav)
 
+        jobs[job_id]["status"] = "analyzing tempo"
+        bpm = p.estimate_tempo_from_audio(raw_wav)
+        jobs[job_id]["bpm"] = bpm
+        jobs[job_id]["meta"]["bpm"] = bpm
+
         jobs[job_id]["status"] = "separating instruments"
         stem_wav = p.separate_stems(raw_wav, d)
 
@@ -111,12 +121,11 @@ def run_pipeline(job_id: str, source_type: str, source_value: str):
         midi_path = d / "transcribed.mid"
         p.transcribe_to_midi(stem_wav, midi_path)
 
-        events, bpm = p.extract_note_events(midi_path)
+        events = p.extract_note_events(midi_path, bpm)
         if not events:
             raise RuntimeError("No notes were detected in this audio.")
 
         jobs[job_id]["events"] = events
-        jobs[job_id]["bpm"] = bpm
 
         jobs[job_id]["status"] = "generating difficulty previews"
         for difficulty in ("easy", "medium", "hard"):
