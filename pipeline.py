@@ -199,12 +199,10 @@ def _bucket_and_build_part(events, grid: float, max_notes: int, keep: str) -> st
         part.append(r)
         return part
 
-    buckets: dict[float, list[tuple[int, int]]] = {}
-    max_offset = 0.0
+    buckets: dict[float, list[tuple[int, int, float]]] = {}
     for start, end, midi_pitch, vel in events:
         q_start = round(start / grid) * grid
-        buckets.setdefault(q_start, []).append((midi_pitch, vel))
-        max_offset = max(max_offset, q_start)
+        buckets.setdefault(q_start, []).append((midi_pitch, vel, end))
 
     sorted_offsets = sorted(buckets.keys())
     for i, off in enumerate(sorted_offsets):
@@ -215,14 +213,19 @@ def _bucket_and_build_part(events, grid: float, max_notes: int, keep: str) -> st
             pitches_here = sorted(pitches_here, key=lambda pv: pv[0])[:max_notes]
 
         next_off = sorted_offsets[i + 1] if i + 1 < len(sorted_offsets) else off + grid
-        dur = max(next_off - off, grid)
+        # Duration comes from the note's real detected release time (quantized to
+        # the grid), not just "until the next note starts" -- capped so it never
+        # overlaps the next note, and floored to at least one grid unit.
+        real_end = max(end for _, _, end in pitches_here)
+        q_end = round(real_end / grid) * grid
+        dur = max(min(q_end, next_off) - off, grid)
 
         gap = off - (part.highestTime)
         if gap > 1e-6:
             part.append(note.Rest(quarterLength=gap))
 
-        pitch_names = [pitch.Pitch(midi=p).nameWithOctave for p, _ in pitches_here]
-        velocity = max(v for _, v in pitches_here)
+        pitch_names = [pitch.Pitch(midi=p).nameWithOctave for p, _, _ in pitches_here]
+        velocity = max(v for _, v, _ in pitches_here)
         if len(pitch_names) == 1:
             el = note.Note(pitch_names[0], quarterLength=dur)
         else:
