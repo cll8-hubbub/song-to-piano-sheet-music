@@ -256,17 +256,16 @@ def score_to_musicxml(score: stream.Score, out_path: Path) -> None:
     score.write("musicxml", fp=str(out_path))
 
 
-def render_musicxml_to_svg_and_pdf(musicxml_path: Path, svg_out: Path, pdf_out: Path) -> int:
+def render_musicxml_to_svg_and_pdf(musicxml_path: Path, pdf_out: Path) -> list[str]:
     tk = verovio.toolkit()
     tk.loadFile(str(musicxml_path))
-    tk.setOptions({"pageWidth": 2100, "pageHeight": 2970, "scale": 40, "adjustPageHeight": True, "header": "none", "footer": "none"})
+    tk.setOptions({"pageWidth": 2100, "pageHeight": 2970, "scale": 40, "header": "none", "footer": "none"})
     n_pages = tk.getPageCount()
 
     svgs = []
     for i in range(1, n_pages + 1):
         svg = tk.renderToSVG(i)
         svgs.append(svg)
-    svg_out.write_text(svgs[0])
 
     c = pdfcanvas.Canvas(str(pdf_out))
     for svg_str in svgs:
@@ -275,4 +274,4 @@ def render_musicxml_to_svg_and_pdf(musicxml_path: Path, svg_out: Path, pdf_out: 
         renderPDF.draw(drawing, c, 0, 0)
         c.showPage()
     c.save()
-    return n_pages
+    return svgs

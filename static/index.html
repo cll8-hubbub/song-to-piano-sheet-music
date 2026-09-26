@@ -154,6 +154,8 @@
   #status-line { font-family: var(--font-mono); font-size: 0.82rem; color: var(--muted-paper-solid); min-height: 1.2em; }
   #preview { overflow-x: auto; background: #fff; border-radius: 3px; }
   #preview svg { max-width: 100%; height: auto; }
+  .sheet-page { background: #fff; }
+  .page-break { height: 1px; background: var(--paper-line); margin: 1.5rem 0; }
 
   a.download-btn {
     display: inline-block; margin-top: 0.9rem; padding: 0.6rem 1.2rem; border-radius: 3px;
@@ -564,7 +566,9 @@ async function rerender() {
   }
 
   document.getElementById("preview-panel").style.display = "block";
-  document.getElementById("preview").innerHTML = data.svg;
+  document.getElementById("preview").innerHTML = data.svgs
+    .map((svg, i) => `<div class="sheet-page">${svg}</div>${i < data.svgs.length - 1 ? '<div class="page-break"></div>' : ''}`)
+    .join("");
   const link = document.getElementById("download-link");
   link.href = data.pdf_url;
   link.style.display = "inline-block";

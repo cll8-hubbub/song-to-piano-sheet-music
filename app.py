@@ -125,14 +125,13 @@ async def render(
 
     d = job_dir(job_id)
     xml_path = d / "render.musicxml"
-    svg_path = d / "render.svg"
     pdf_path = d / "sheet.pdf"
     p.score_to_musicxml(score, xml_path)
-    n_pages = p.render_musicxml_to_svg_and_pdf(xml_path, svg_path, pdf_path)
+    svgs = p.render_musicxml_to_svg_and_pdf(xml_path, pdf_path)
 
     return {
-        "svg": svg_path.read_text(),
-        "pages": n_pages,
+        "svgs": svgs,
+        "pages": len(svgs),
         "pdf_url": f"api/download/{job_id}",
     }
 
