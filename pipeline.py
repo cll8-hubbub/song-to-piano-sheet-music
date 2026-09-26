@@ -13,10 +13,12 @@ import io
 import subprocess
 from pathlib import Path
 
-import cairosvg
 import imageio_ffmpeg
 import verovio
 from music21 import chord, clef, converter, key, meter, note, pitch, stream
+from reportlab.graphics import renderPDF
+from reportlab.pdfgen import canvas as pdfcanvas
+from svglib.svglib import svg2rlg
 
 FFMPEG_PATH = imageio_ffmpeg.get_ffmpeg_exe()
 
@@ -257,7 +259,7 @@ def score_to_musicxml(score: stream.Score, out_path: Path) -> None:
 def render_musicxml_to_svg_and_pdf(musicxml_path: Path, svg_out: Path, pdf_out: Path) -> int:
     tk = verovio.toolkit()
     tk.loadFile(str(musicxml_path))
-    tk.setOptions({"pageWidth": 2100, "pageHeight": 2970, "scale": 40, "adjustPageHeight": True})
+    tk.setOptions({"pageWidth": 2100, "pageHeight": 2970, "scale": 40, "adjustPageHeight": True, "header": "none", "footer": "none"})
     n_pages = tk.getPageCount()
 
     svgs = []
@@ -266,21 +268,11 @@ def render_musicxml_to_svg_and_pdf(musicxml_path: Path, svg_out: Path, pdf_out: 
         svgs.append(svg)
     svg_out.write_text(svgs[0])
 
-    pdf_bytes_pages = [cairosvg.svg2pdf(bytestring=s.encode("utf-8")) for s in svgs]
-    if len(pdf_bytes_pages) == 1:
-        pdf_out.write_bytes(pdf_bytes_pages[0])
-    else:
-        _merge_pdfs(pdf_bytes_pages, pdf_out)
+    c = pdfcanvas.Canvas(str(pdf_out))
+    for svg_str in svgs:
+        drawing = svg2rlg(io.BytesIO(svg_str.encode("utf-8")))
+        c.setPageSize((drawing.width, drawing.height))
+        renderPDF.draw(drawing, c, 0, 0)
+        c.showPage()
+    c.save()
     return n_pages
-
-
-def _merge_pdfs(pdf_byte_list, out_path: Path) -> None:
-    from pypdf import PdfWriter, PdfReader
-
-    writer = PdfWriter()
-    for pdf_bytes in pdf_byte_list:
-        reader = PdfReader(io.BytesIO(pdf_bytes))
-        for page in reader.pages:
-            writer.add_page(page)
-    with open(out_path, "wb") as f:
-        writer.write(f)
