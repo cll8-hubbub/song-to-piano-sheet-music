@@ -7,7 +7,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
-<script src="https://cdn.jsdelivr.net/npm/html-midi-player@1.5.0/dist/midi-player.min.js"></script>
+<script src="https://cdn.jsdelivr.net/combine/npm/tone@14.7.58,npm/@magenta/music@1.23.1/es6/core.js,npm/html-midi-player@1.5.0"></script>
 <style>
   :root {
     --ink-black: #14110f;
@@ -156,6 +156,23 @@
   #preview svg { max-width: 100%; height: auto; }
   .sheet-page { background: #fff; }
   .page-break { height: 1px; background: var(--paper-line); margin: 1.5rem 0; }
+  .page-label-row {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 0.3rem 0.2rem 0.5rem; border-bottom: 1px solid var(--paper-line); margin-bottom: 0.4rem;
+  }
+  .page-label-row .page-title { font-family: var(--font-display); font-weight: 600; font-size: 1.1rem; }
+  .page-label-row .page-meta { font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted-paper-solid); text-align: right; }
+  .page-label-row .page-meta a { color: var(--brass); }
+  .page-number { text-align: center; font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted-paper-solid); padding-top: 0.3rem; }
+
+  #library-list { display: flex; flex-direction: column; gap: 0.5rem; }
+  .library-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 0.6rem 0.8rem; border: 1px solid var(--paper-line); border-radius: 3px; border-left-width: 3px;
+  }
+  .library-item .lib-title { font-weight: 600; font-size: 0.92rem; }
+  .library-item .lib-meta { font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted-paper-solid); }
+  .library-item .lib-meta a { color: var(--brass); }
 
   a.download-btn {
     display: inline-block; margin-top: 0.9rem; padding: 0.6rem 1.2rem; border-radius: 3px;
@@ -414,13 +431,9 @@
           <option value="hard">Hard — closest to the recording</option>
         </select>
       </div>
-      <div class="control-group">
-        <label for="accidental-mode">Accidentals</label>
-        <select id="accidental-mode">
-          <option value="original" selected>As transcribed</option>
-          <option value="sharps">All sharps</option>
-          <option value="flats">All flats</option>
-        </select>
+      <div class="control-group checkbox-row">
+        <input type="checkbox" id="label-key-signature">
+        <label for="label-key-signature" style="margin:0; text-transform:none; letter-spacing:0; font-family:var(--font-body); font-size:0.88rem;">Label key signature</label>
       </div>
       <div class="control-group checkbox-row">
         <input type="checkbox" id="show-note-names">
@@ -433,6 +446,11 @@
   <div class="panel" id="preview-panel" style="display:none;">
     <div id="preview"></div>
     <a id="download-link" class="download-btn" href="#" style="display:none;">Download PDF</a>
+  </div>
+
+  <div class="panel" id="library-panel">
+    <h3 style="margin:0 0 0.9rem; font-family: var(--font-display); font-weight:600;">Your library</h3>
+    <div id="library-list"><p class="warning">No songs transcribed yet.</p></div>
   </div>
 </main>
 
@@ -447,7 +465,7 @@ let currentJobId = null;
 const TABS = ["search", "link", "file"];
 TABS.forEach(t => document.getElementById(`tab-${t}`).addEventListener("click", () => switchTab(t)));
 
-let selectedTrackUrl = null;
+let selectedTrack = null;
 
 function switchTab(which) {
   TABS.forEach(t => {
@@ -461,7 +479,7 @@ document.getElementById("search-btn").addEventListener("click", async () => {
   const resultsEl = document.getElementById("search-results");
   if (!query) return;
   resultsEl.innerHTML = "<p class='warning'>Searching…</p>";
-  selectedTrackUrl = null;
+  selectedTrack = null;
 
   const res = await fetch(`api/search?q=${encodeURIComponent(query)}`);
   const data = await res.json();
@@ -475,18 +493,17 @@ document.getElementById("search-btn").addEventListener("click", async () => {
   }
   resultsEl.innerHTML = data.results.map((r, i) => {
     const mins = Math.floor(r.duration / 60), secs = String(Math.floor(r.duration % 60)).padStart(2, "0");
-    return `<div class="search-result" data-idx="${i}" data-url="${r.url}">
+    return `<div class="search-result" data-idx="${i}">
       <div><strong>${r.title}</strong></div>
       <div class="warning">${r.uploader} · ${mins}:${secs}</div>
     </div>`;
   }).join("");
-  resultsEl.dataset.results = JSON.stringify(data.results);
 
   resultsEl.querySelectorAll(".search-result").forEach(el => {
     el.addEventListener("click", () => {
       resultsEl.querySelectorAll(".search-result").forEach(x => x.classList.remove("selected"));
       el.classList.add("selected");
-      selectedTrackUrl = el.dataset.url;
+      selectedTrack = data.results[parseInt(el.dataset.idx, 10)];
     });
   });
 });
@@ -501,8 +518,11 @@ document.getElementById("transcribe-btn").addEventListener("click", async () => 
     if (!fileInput.files.length) { statusLine.textContent = "Choose an audio file first."; return; }
     formData.append("file", fileInput.files[0]);
   } else if (activeTab === "search") {
-    if (!selectedTrackUrl) { statusLine.textContent = "Search and pick a track first."; return; }
-    formData.append("source_url", selectedTrackUrl);
+    if (!selectedTrack) { statusLine.textContent = "Search and pick a track first."; return; }
+    formData.append("source_url", selectedTrack.url);
+    formData.append("source_title", selectedTrack.title || "");
+    formData.append("source_uploader", selectedTrack.uploader || "");
+    formData.append("source_webpage_url", selectedTrack.webpage_url || "");
   } else {
     const url = document.getElementById("source-url").value.trim();
     if (!url) { statusLine.textContent = "Paste a link first."; return; }
@@ -531,12 +551,8 @@ async function pollStatus() {
   if (data.status === "done") {
     statusLine.textContent = "Transcription complete.";
     document.getElementById("transcribe-btn").disabled = false;
-    document.getElementById("controls-panel").style.display = "block";
-    document.getElementById("listen-panel").style.display = "block";
-    ["easy", "medium", "hard"].forEach(diff => {
-      document.getElementById(`player-${diff}`).src = `api/preview/${currentJobId}/${diff}`;
-    });
-    await rerender();
+    await activateJob(currentJobId);
+    loadLibrary();
   } else if (data.status === "error") {
     statusLine.textContent = "Error: " + data.error;
     document.getElementById("transcribe-btn").disabled = false;
@@ -544,6 +560,16 @@ async function pollStatus() {
     statusLine.textContent = "Status: " + data.status + "…";
     setTimeout(pollStatus, 1500);
   }
+}
+
+async function activateJob(jobId) {
+  currentJobId = jobId;
+  document.getElementById("controls-panel").style.display = "block";
+  document.getElementById("listen-panel").style.display = "block";
+  ["easy", "medium", "hard"].forEach(diff => {
+    document.getElementById(`player-${diff}`).src = `api/preview/${jobId}/${diff}`;
+  });
+  await rerender();
 }
 
 document.getElementById("rerender-btn").addEventListener("click", rerender);
@@ -554,8 +580,9 @@ async function rerender() {
   statusLine.textContent = "Rendering sheet music…";
 
   const formData = new FormData();
-  formData.append("difficulty", document.getElementById("difficulty").value);
-  formData.append("accidental_mode", document.getElementById("accidental-mode").value);
+  const difficulty = document.getElementById("difficulty").value;
+  formData.append("difficulty", difficulty);
+  formData.append("label_key_signature", document.getElementById("label-key-signature").checked);
   formData.append("show_note_names", document.getElementById("show-note-names").checked);
 
   const res = await fetch(`api/render/${currentJobId}`, { method: "POST", body: formData });
@@ -566,14 +593,52 @@ async function rerender() {
   }
 
   document.getElementById("preview-panel").style.display = "block";
-  document.getElementById("preview").innerHTML = data.svgs
-    .map((svg, i) => `<div class="sheet-page">${svg}</div>${i < data.svgs.length - 1 ? '<div class="page-break"></div>' : ''}`)
-    .join("");
+  const linkHtml = data.source_url
+    ? `<a href="${data.source_url}" target="_blank" rel="noopener">Listen to the original ↗</a>`
+    : "";
+  document.getElementById("preview").innerHTML = data.svgs.map((svg, i) => `
+    <div class="sheet-page">
+      <div class="page-label-row">
+        <span class="page-title">${data.title}</span>
+        <span class="page-meta">Difficulty: ${data.difficulty}${linkHtml ? " · " + linkHtml : ""}</span>
+      </div>
+      ${svg}
+      <div class="page-number">Page ${i + 1} of ${data.svgs.length}</div>
+    </div>
+    ${i < data.svgs.length - 1 ? '<div class="page-break"></div>' : ''}
+  `).join("");
   const link = document.getElementById("download-link");
   link.href = data.pdf_url;
   link.style.display = "inline-block";
   statusLine.textContent = `Rendered ${data.pages} page(s).`;
 }
+
+async function loadLibrary() {
+  const listEl = document.getElementById("library-list");
+  const res = await fetch("api/library");
+  const data = await res.json();
+  if (!data.library || !data.library.length) {
+    listEl.innerHTML = "<p class='warning'>No songs transcribed yet.</p>";
+    return;
+  }
+  listEl.innerHTML = data.library.map(entry => `
+    <div class="library-item">
+      <div>
+        <div class="lib-title">${entry.title || "Untitled"}</div>
+        <div class="lib-meta">${entry.uploader || ""}${entry.webpage_url ? ` · <a href="${entry.webpage_url}" target="_blank" rel="noopener">original</a>` : ""}</div>
+      </div>
+      <button class="go" style="margin:0;" data-job-id="${entry.job_id}">Open</button>
+    </div>
+  `).join("");
+  listEl.querySelectorAll("button[data-job-id]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      document.getElementById("status-line").textContent = "Opening from your library…";
+      activateJob(btn.dataset.jobId);
+    });
+  });
+}
+
+loadLibrary();
 </script>
 
 </body>

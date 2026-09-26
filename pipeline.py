@@ -1,15 +1,16 @@
 """Audio -> piano sheet music pipeline.
 
 Stages:
-  1. acquire_audio      YouTube URL or uploaded file -> wav
+  1. acquire_audio      SoundCloud/YouTube URL or uploaded file -> wav (+ metadata)
   2. separate_stems     demucs, drop the drum stem (cleans up pitch detection)
   3. transcribe_to_midi basic-pitch, polyphonic audio -> MIDI notes
   4. arrange_for_piano   music21, split hands + quantize + simplify by difficulty
-  5. apply_adjustments   force sharps/flats spelling, add note-name labels
-  6. render_score        MusicXML -> SVG (preview) + PDF (download) via verovio/cairosvg
+  5. apply_adjustments   detect key signature, add note/key labels
+  6. render_score        MusicXML -> SVG (preview) + labeled PDF (download) via verovio
 """
 
 import io
+import json
 import subprocess
 from pathlib import Path
 
@@ -21,9 +22,6 @@ from reportlab.pdfgen import canvas as pdfcanvas
 from svglib.svglib import svg2rlg
 
 FFMPEG_PATH = imageio_ffmpeg.get_ffmpeg_exe()
-
-SHARP_RESPELL = {"C-": "B", "D-": "C#", "E-": "D#", "F-": "E", "G-": "F#", "A-": "G#", "B-": "A#"}
-FLAT_RESPELL = {"C#": "D-", "D#": "E-", "F#": "G-", "G#": "A-", "A#": "B-"}
 
 DIFFICULTY_SETTINGS = {
     "easy": {
@@ -57,7 +55,6 @@ def search_soundcloud(query: str, limit: int = 8) -> list[dict]:
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         raise RuntimeError(f"Search failed: {result.stderr[-500:]}")
-    import json
     data = json.loads(result.stdout)
     return [
         {
@@ -65,16 +62,31 @@ def search_soundcloud(query: str, limit: int = 8) -> list[dict]:
             "uploader": e.get("uploader"),
             "duration": e.get("duration"),
             "url": e.get("url"),
+            "webpage_url": e.get("webpage_url"),
         }
         for e in data.get("entries", [])
     ]
 
 
-def acquire_audio_from_url(url: str, out_wav: Path) -> None:
+def acquire_audio_from_url(url: str, out_wav: Path) -> dict:
     """Downloads any yt-dlp-supported URL's audio as wav (SoundCloud works
     reliably from server IPs; YouTube usually doesn't — see the bot-check
     message below). Raises RuntimeError with a user-actionable message on
-    that known failure mode."""
+    that known failure mode. Returns whatever title/uploader/webpage_url
+    metadata yt-dlp could extract, for labeling the sheet music later."""
+    info_result = subprocess.run(
+        ["yt-dlp", "--no-warnings", "-J", url], capture_output=True, text=True
+    )
+    metadata = {"title": None, "uploader": None, "webpage_url": url}
+    if info_result.returncode == 0:
+        try:
+            info = json.loads(info_result.stdout)
+            metadata["title"] = info.get("title")
+            metadata["uploader"] = info.get("uploader")
+            metadata["webpage_url"] = info.get("webpage_url", url)
+        except (json.JSONDecodeError, KeyError):
+            pass
+
     cmd = [
         "yt-dlp",
         "--ffmpeg-location", FFMPEG_PATH,
@@ -98,6 +110,7 @@ def acquire_audio_from_url(url: str, out_wav: Path) -> None:
             candidates[0].rename(out_wav)
         else:
             raise RuntimeError("yt-dlp reported success but produced no audio file.")
+    return metadata
 
 
 def convert_to_wav(src_path: Path, out_wav: Path) -> None:
@@ -218,25 +231,39 @@ def _bucket_and_build_part(events, grid: float, max_notes: int, keep: str) -> st
     return part
 
 
-def apply_accidental_mode(score: stream.Score, mode: str) -> None:
-    """mode: 'sharps', 'flats', or 'original'. Forces a consistent
-    enharmonic spelling and pins the key signature to C so every
-    accidental is explicit rather than implied by the key."""
-    if mode not in ("sharps", "flats"):
+def detect_and_apply_key_signature(score: stream.Score) -> key.Key:
+    """Analyzes the actual pitch content to guess the real key (e.g. D major,
+    2 sharps) and writes a proper key signature onto both hands, instead of
+    always reading as plain C. Call this before makeNotation() so accidental
+    display is computed against the real key context."""
+    try:
+        analyzed_key = score.analyze("key")
+    except Exception:
+        analyzed_key = key.Key("C")
+    for part in score.parts:
+        part.insert(0, key.KeySignature(analyzed_key.sharps))
+    return analyzed_key
+
+
+def apply_key_signature_labels(score: stream.Score, analyzed_key: key.Key, show: bool) -> None:
+    """Beginner aid: a real key signature only marks sharps/flats once, at
+    the clef, the way an experienced reader expects. This optionally marks
+    every affected note throughout the piece too (the way a beginner might
+    pencil in a reminder), on top of the real key signature -- it doesn't
+    invent extra sharps/flats, it just repeats the ones the key already
+    implies everywhere they apply."""
+    if not show or analyzed_key.sharps == 0:
         return
-    target_table = SHARP_RESPELL if mode == "sharps" else FLAT_RESPELL
+    altered_steps = {p.step for p in analyzed_key.alteredPitches}
+    accidental_name = "sharp" if analyzed_key.sharps > 0 else "flat"
 
     for part in score.parts:
-        part.insert(0, key.KeySignature(0))
-        for el in part.flatten().notesAndRests:
-            pitches_to_fix = el.pitches if isinstance(el, chord.Chord) else ([el.pitch] if isinstance(el, note.Note) else [])
-            for p in pitches_to_fix:
-                name = p.name
-                if mode == "sharps" and name in target_table:
-                    p.name = target_table[name]
-                elif mode == "flats" and name in target_table:
-                    p.name = target_table[name]
-                if p.accidental is not None:
+        for el in part.flatten().notes:
+            pitches_here = el.pitches if isinstance(el, chord.Chord) else [el.pitch]
+            for p in pitches_here:
+                if p.step in altered_steps:
+                    if p.accidental is None:
+                        p.accidental = pitch.Accidental(accidental_name)
                     p.accidental.displayStatus = True
 
 
@@ -256,22 +283,45 @@ def score_to_musicxml(score: stream.Score, out_path: Path) -> None:
     score.write("musicxml", fp=str(out_path))
 
 
-def render_musicxml_to_svg_and_pdf(musicxml_path: Path, pdf_out: Path) -> list[str]:
+def render_musicxml_to_svg_and_pdf(
+    musicxml_path: Path,
+    pdf_out: Path,
+    title: str = "Untitled",
+    difficulty: str = "medium",
+    source_url: str | None = None,
+) -> list[str]:
     tk = verovio.toolkit()
     tk.loadFile(str(musicxml_path))
     tk.setOptions({"pageWidth": 2100, "pageHeight": 2970, "scale": 40, "header": "none", "footer": "none"})
     n_pages = tk.getPageCount()
 
-    svgs = []
-    for i in range(1, n_pages + 1):
-        svg = tk.renderToSVG(i)
-        svgs.append(svg)
+    svgs = [tk.renderToSVG(i) for i in range(1, n_pages + 1)]
 
+    header_h, footer_h = 50, 24
     c = pdfcanvas.Canvas(str(pdf_out))
-    for svg_str in svgs:
+    for page_num, svg_str in enumerate(svgs, start=1):
         drawing = svg2rlg(io.BytesIO(svg_str.encode("utf-8")))
-        c.setPageSize((drawing.width, drawing.height))
-        renderPDF.draw(drawing, c, 0, 0)
+        page_w, page_h = drawing.width, drawing.height + header_h + footer_h
+        c.setPageSize((page_w, page_h))
+        renderPDF.draw(drawing, c, 0, footer_h)
+
+        c.setFont("Helvetica-Bold", 13)
+        c.drawString(20, page_h - 28, title or "Untitled")
+        c.setFont("Helvetica", 9)
+        c.drawString(20, page_h - 42, f"Difficulty: {difficulty.capitalize()}")
+
+        if source_url:
+            link_text = "Listen to the original"
+            text_w = c.stringWidth(link_text, "Helvetica", 9)
+            x0 = page_w - 20 - text_w
+            c.setFillColorRGB(0.2, 0.2, 0.6)
+            c.setFont("Helvetica", 9)
+            c.drawString(x0, page_h - 42, link_text)
+            c.linkURL(source_url, (x0, page_h - 46, x0 + text_w, page_h - 34), relative=0)
+            c.setFillColorRGB(0, 0, 0)
+
+        c.setFont("Helvetica", 8)
+        c.drawCentredString(page_w / 2, 10, f"Page {page_num} of {n_pages}")
         c.showPage()
     c.save()
     return svgs
