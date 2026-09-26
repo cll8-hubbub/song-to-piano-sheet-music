@@ -222,10 +222,12 @@ def _bucket_and_build_part(events, grid: float, max_notes: int, keep: str) -> st
             part.append(note.Rest(quarterLength=gap))
 
         pitch_names = [pitch.Pitch(midi=p).nameWithOctave for p, _ in pitches_here]
+        velocity = max(v for _, v in pitches_here)
         if len(pitch_names) == 1:
             el = note.Note(pitch_names[0], quarterLength=dur)
         else:
             el = chord.Chord(pitch_names, quarterLength=dur)
+        el.volume.velocity = velocity
         part.append(el)
 
     return part
