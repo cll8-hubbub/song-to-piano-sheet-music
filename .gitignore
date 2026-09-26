@@ -1,0 +1,6 @@
+.venv/
+jobs/
+__pycache__/
+*.pyc
+test_*.*
+hero_excerpt.*

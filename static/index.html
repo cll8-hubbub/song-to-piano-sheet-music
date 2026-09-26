@@ -1,0 +1,576 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hear it. Score it. Play it. — Song to Piano Sheet Music</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/html-midi-player@1.5.0/dist/midi-player.min.js"></script>
+<style>
+  :root {
+    --ink-black: #14110f;
+    --ink-black-2: #0b0908;
+    --paper: #f6f1e7;
+    --paper-line: #e2d8c3;
+    --ivory: #fffcf5;
+    --brass: #ad863f;
+    --brass-bright: #c89a4e;
+    --graphite: #2c2a27;
+    --muted-paper: #83786690;
+    --muted-paper-solid: #74695a;
+    --muted-black: #b9ad97;
+
+    --font-display: 'Fraunces', serif;
+    --font-body: 'Inter', system-ui, -apple-system, sans-serif;
+    --font-mono: 'IBM Plex Mono', monospace;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    font-family: var(--font-body);
+    background: var(--paper);
+    color: var(--graphite);
+  }
+  :focus-visible { outline: 2px solid var(--brass); outline-offset: 2px; }
+
+  /* ---------- Hero ---------- */
+  .hero {
+    position: relative;
+    overflow: hidden;
+    background: radial-gradient(120% 140% at 12% -10%, #2a231b 0%, var(--ink-black) 45%, var(--ink-black-2) 100%);
+    color: var(--ivory);
+    padding: 4.5rem 1.5rem 3.5rem;
+  }
+  .hero-inner { max-width: 1080px; margin: 0 auto; display: grid; grid-template-columns: 1.1fr 1fr; gap: 2.5rem; align-items: center; }
+  .hero-eyebrow {
+    font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--brass-bright); margin: 0 0 1.1rem;
+  }
+  .hero h1 {
+    font-family: var(--font-display); font-weight: 600; font-style: normal;
+    font-size: clamp(2.3rem, 5.2vw, 3.8rem); line-height: 1.06; margin: 0 0 1.1rem; letter-spacing: -0.01em;
+  }
+  .hero h1 em { font-style: italic; font-weight: 500; color: var(--brass-bright); }
+  .hero p.sub { max-width: 38ch; color: var(--muted-black); font-size: 1.05rem; line-height: 1.55; margin: 0 0 1.8rem; }
+  .btn-primary {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    background: var(--brass); color: var(--ink-black); border: none; border-radius: 3px;
+    font-family: var(--font-body); font-weight: 600; font-size: 0.95rem; padding: 0.75rem 1.3rem;
+    cursor: pointer; text-decoration: none; transition: background 0.15s ease, transform 0.15s ease;
+  }
+  .btn-primary:hover { background: var(--brass-bright); transform: translateY(-1px); }
+
+  .hero-visual { position: relative; }
+  #hero-excerpt-wrap {
+    background: linear-gradient(160deg, #1a1512, #0f0c0a);
+    border: 1px solid #3a2f22; border-radius: 4px; padding: 2.6rem 1.4rem;
+    box-shadow: 0 30px 60px -20px rgba(0,0,0,0.6);
+    transform: rotate(-1.4deg);
+  }
+  #hero-excerpt-wrap svg { width: 100%; height: auto; display: block; color: var(--brass-bright); overflow: visible; }
+  #hero-excerpt-wrap svg * { fill: var(--brass-bright); }
+  #hero-excerpt-clip {
+    clip-path: inset(0 0 0 0);
+    animation: reveal 1.3s cubic-bezier(.6,0,.2,1) 0.15s both;
+  }
+  @keyframes reveal { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+  @media (prefers-reduced-motion: reduce) {
+    #hero-excerpt-clip { animation: none; }
+  }
+  @media (max-width: 820px) {
+    .hero-inner { grid-template-columns: 1fr; }
+    #hero-excerpt-wrap { transform: none; }
+  }
+
+  /* ---------- Steps ---------- */
+  .steps-section { max-width: 1040px; margin: 0 auto; padding: 3.5rem 1.5rem 3rem; }
+  .steps-eyebrow {
+    font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase;
+    color: var(--muted-paper-solid); text-align: center; margin: 0 0 2rem;
+  }
+  .steps-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.1rem; }
+  @media (max-width: 760px) { .steps-grid { grid-template-columns: 1fr 1fr; } }
+  @media (max-width: 480px) { .steps-grid { grid-template-columns: 1fr; } }
+  .step-card { background: var(--ivory); border-top: 3px solid var(--brass); padding: 1.4rem 1.1rem 1.2rem; }
+  .step-card svg { display: block; margin-bottom: 0.6rem; }
+  .step-card h3 { font-family: var(--font-display); font-weight: 600; font-size: 1.08rem; margin: 0 0 0.4rem; }
+  .step-card p { font-size: 0.86rem; color: var(--muted-paper-solid); line-height: 1.5; margin: 0; }
+
+  /* ---------- App ---------- */
+  #app { max-width: 900px; margin: 0 auto; padding: 0 1.5rem 4rem; display: flex; flex-direction: column; gap: 1.25rem; }
+  .panel { background: var(--ivory); border: 1px solid var(--paper-line); border-radius: 3px; padding: 1.2rem 1.35rem; box-shadow: 0 2px 14px rgba(20,17,15,0.05); }
+
+  .source-tabs { display: flex; gap: 0.5rem; margin-bottom: 0.9rem; }
+  .source-tabs button {
+    flex: 1; padding: 0.55rem; border-radius: 3px; border: 1px solid var(--paper-line);
+    background: var(--paper); cursor: pointer; font-size: 0.87rem; font-family: var(--font-body); color: var(--graphite);
+  }
+  .source-tabs button.active { background: var(--brass); color: var(--ink-black); border-color: var(--brass); font-weight: 600; }
+  .source-pane { display: none; }
+  .source-pane.active { display: block; }
+  input[type=text], input[type=file], select {
+    width: 100%; padding: 0.6rem 0.75rem; border-radius: 3px; border: 1px solid var(--paper-line);
+    font-size: 0.9rem; background: #fff; color: var(--graphite); font-family: var(--font-body);
+  }
+  .warning { font-family: var(--font-mono); font-size: 0.74rem; color: var(--muted-paper-solid); margin-top: 0.6rem; line-height: 1.6; }
+  .warning code { background: var(--paper); padding: 0.1rem 0.3rem; border-radius: 3px; }
+
+  .listen-row { display: flex; align-items: center; gap: 0.9rem; margin-bottom: 0.7rem; }
+  .listen-label {
+    width: 4.8rem; font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--brass); flex-shrink: 0;
+  }
+  midi-player { flex: 1; }
+  midi-player::part(control-panel) { background: var(--ivory); border: 1px solid var(--paper-line); border-radius: 3px; }
+  midi-player::part(play-button) { color: var(--ink-black); }
+  midi-player::part(seek-bar) { accent-color: var(--brass); }
+  midi-player::part(time), midi-player::part(current-time), midi-player::part(total-time) {
+    font-family: var(--font-mono); color: var(--muted-paper-solid);
+  }
+
+  #search-results { margin-top: 0.8rem; display: flex; flex-direction: column; gap: 0.45rem; }
+  .search-result { padding: 0.55rem 0.75rem; border: 1px solid var(--paper-line); border-radius: 3px; cursor: pointer; border-left-width: 3px; }
+  .search-result:hover { background: var(--paper); }
+  .search-result.selected { border-left-color: var(--brass); background: #faf4e6; }
+
+  button.go {
+    margin-top: 1rem; padding: 0.7rem 1.25rem; border-radius: 3px; border: none;
+    background: var(--brass); color: var(--ink-black); font-size: 0.95rem; font-weight: 600;
+    font-family: var(--font-body); cursor: pointer; transition: background 0.15s ease;
+  }
+  button.go:hover { background: var(--brass-bright); }
+  button.go:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .controls-row { display: flex; flex-wrap: wrap; gap: 1.35rem; align-items: flex-end; }
+  .control-group label {
+    display: block; font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.06em; text-transform: uppercase;
+    color: var(--muted-paper-solid); margin-bottom: 0.35rem;
+  }
+  .checkbox-row { display: flex; align-items: center; gap: 0.45rem; font-size: 0.88rem; }
+
+  #status-line { font-family: var(--font-mono); font-size: 0.82rem; color: var(--muted-paper-solid); min-height: 1.2em; }
+  #preview { overflow-x: auto; background: #fff; border-radius: 3px; }
+  #preview svg { max-width: 100%; height: auto; }
+
+  a.download-btn {
+    display: inline-block; margin-top: 0.9rem; padding: 0.6rem 1.2rem; border-radius: 3px;
+    background: var(--brass); color: var(--ink-black); text-decoration: none; font-size: 0.9rem; font-weight: 600;
+  }
+  a.download-btn:hover { background: var(--brass-bright); }
+
+  footer {
+    text-align: center; font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted-paper-solid);
+    padding: 1.5rem 1rem 3rem; line-height: 1.9;
+  }
+</style>
+</head>
+<body>
+
+<section class="hero">
+  <div class="hero-inner">
+    <div>
+      <p class="hero-eyebrow">♪ Audio → Sheet Music</p>
+      <h1>Hear it.<br>Score it.<br><em>Play it.</em></h1>
+      <p class="sub">Search a song, get real piano sheet music — pick a difficulty you can actually play, adjust the notation your way, and take home a clean PDF.</p>
+      <a href="#app" class="btn-primary">Find your song ↓</a>
+    </div>
+    <div class="hero-visual">
+      <div id="hero-excerpt-wrap">
+        <div id="hero-excerpt-clip">
+<svg width="1431px" height="254px" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" overflow="visible" id="heroex">
+   <defs>
+      <g id="E050-heroex">
+         <path transform="scale(1,-1)" d="M441 -245c-23 -4 -48 -6 -76 -6c-59 0 -102 7 -130 20c-88 42 -150 93 -187 154c-26 44 -43 103 -48 176c0 6 -1 13 -1 19c0 54 15 111 45 170c29 57 65 106 110 148s96 85 153 127c-3 16 -8 46 -13 92c-4 43 -5 73 -5 89c0 117 16 172 69 257c34 54 64 82 89 82 c21 0 43 -30 69 -92s39 -115 41 -159v-15c0 -109 -21 -162 -67 -241c-13 -20 -63 -90 -98 -118c-13 -9 -25 -19 -37 -29l31 -181c8 1 18 2 28 2c58 0 102 -12 133 -35c59 -43 92 -104 98 -184c1 -7 1 -15 1 -22c0 -123 -87 -209 -181 -248c8 -57 17 -110 25 -162 c5 -31 6 -58 6 -80c0 -30 -5 -53 -14 -70c-35 -64 -88 -99 -158 -103c-5 0 -11 -1 -16 -1c-37 0 -72 10 -108 27c-50 24 -77 59 -80 105v11c0 29 7 55 20 76c18 28 45 42 79 44h6c49 0 93 -42 97 -87v-9c0 -51 -34 -86 -105 -106c17 -24 51 -36 102 -36c62 0 116 43 140 85 c9 16 13 41 13 74c0 20 -1 42 -5 67c-8 53 -18 106 -26 159zM461 939c-95 0 -135 -175 -135 -286c0 -24 2 -48 5 -71c50 39 92 82 127 128c40 53 60 100 60 140v8c-4 53 -22 81 -55 81h-2zM406 119l54 -326c73 25 110 78 110 161c0 7 0 15 -1 23c-7 95 -57 142 -151 142h-12 zM382 117c-72 -2 -128 -47 -128 -120v-7c2 -46 43 -99 75 -115c-3 -2 -7 -5 -10 -10c-70 33 -116 88 -123 172v11c0 68 44 126 88 159c23 17 49 29 78 36l-29 170c-21 -13 -52 -37 -92 -73c-50 -44 -86 -84 -109 -119c-45 -69 -67 -130 -67 -182v-13c5 -68 35 -127 93 -176 s125 -73 203 -73c25 0 50 3 75 9c-19 111 -36 221 -54 331z" />
+      </g>
+      <g id="E262-heroex">
+         <path transform="scale(1,-1)" d="M136 186v169h17v-164l44 14v-91l-44 -14v-165l44 12v-91l-44 -13v-155h-17v150l-76 -22v-155h-17v149l-43 -13v90l43 14v167l-43 -14v92l43 13v169h17v-163zM60 73v-167l76 22v168z" />
+      </g>
+      <g id="E084-heroex">
+         <path transform="scale(1,-1)" d="M20 -78c84 97 114 180 134 329h170c-13 -32 -82 -132 -99 -151l-84 -97c-33 -36 -59 -63 -80 -81h162v102l127 123v-225h57v-39h-57v-34c0 -43 19 -65 57 -65v-34h-244v36c48 0 60 26 60 70v27h-203v39z" />
+      </g>
+      <g id="E0A4-heroex">
+         <path transform="scale(1,-1)" d="M0 -39c0 68 73 172 200 172c66 0 114 -37 114 -95c0 -84 -106 -171 -218 -171c-64 0 -96 30 -96 94z" />
+      </g>
+      <g id="E062-heroex">
+         <path transform="scale(1,-1)" d="M582 -120c0 32 26 58 58 58s58 -26 58 -58s-26 -58 -58 -58s-58 26 -58 58zM582 120c0 32 26 58 58 58s58 -26 58 -58s-26 -58 -58 -58s-58 26 -58 58zM158 96c51 0 73 -14 88 -49l16 -39c0 -17 -2 -30 -7 -40c-3 -11 -10 -21 -19 -31c-17 -18 -49 -43 -84 -43 c-55 0 -77 13 -112 44c-24 21 -35 55 -35 100c0 46 14 81 32 112c30 52 71 79 137 93l36 6l26 2c154 0 235 -68 274 -182c11 -32 18 -68 18 -107c0 -103 -26 -182 -68 -250c-89 -145 -234 -230 -412 -288l-30 -5c-9 0 -14 3 -14 8c3 10 5 11 10 16c35 15 70 30 96 44l78 43 c96 57 162 136 197 258c9 33 17 60 22 100c3 22 5 35 6 39c-7 69 -16 115 -23 140s-4 22 -16 40c-8 12 -19 23 -31 34c-24 21 -62 44 -118 44c-48 0 -84 -8 -113 -28c-28 -19 -42 -44 -42 -73v-16c2 -5 3 -9 4 -11c24 22 52 39 84 39z" />
+      </g>
+      <g id="E0A3-heroex">
+         <path transform="scale(1,-1)" d="M278 64c0 22 -17 39 -43 39c-12 0 -26 -3 -41 -10c-85 -43 -165 -94 -165 -156c5 -25 15 -32 49 -32c67 11 200 95 200 159zM0 -36c0 68 73 174 200 174c66 0 114 -39 114 -97c0 -84 -106 -173 -218 -173c-64 0 -96 32 -96 96z" />
+      </g>
+   </defs>
+   <svg class="definition-scale" color="black" font-family="Times, serif" viewBox="0 0 26000 4600">
+      <g class="page-margin" transform="translate(500, 500)">
+         <g class="system">
+            <path d="M13 540 L13 3060" stroke-width="27" />
+            <g class="measure">
+               <g class="staff">
+                  <path d="M0 540 L4964 540" stroke-width="13" />
+                  <path d="M0 720 L4964 720" stroke-width="13" />
+                  <path d="M0 900 L4964 900" stroke-width="13" />
+                  <path d="M0 1080 L4964 1080" stroke-width="13" />
+                  <path d="M0 1260 L4964 1260" stroke-width="13" />
+                  <use xlink:href="#E050-heroex" transform="translate(117, 1080) scale(0.72, 0.72)" />
+                  <use xlink:href="#E262-heroex" transform="translate(798, 540) scale(0.72, 0.72)" />
+                  <use xlink:href="#E084-heroex" transform="translate(1105, 720) scale(0.72, 0.72)" />
+                  <use xlink:href="#E084-heroex" transform="translate(1105, 1080) scale(0.72, 0.72)" />
+                  <use xlink:href="#E0A4-heroex" transform="translate(1667, 630) scale(0.72, 0.72)" />
+                  <path d="M1676 658 L1676 1332" stroke-width="18" />
+                  <use xlink:href="#E0A4-heroex" transform="translate(2117, 720) scale(0.72, 0.72)" />
+                  <path d="M2126 748 L2126 1377" stroke-width="18" />
+                  <polygon points="1667,1350 2135,1395 2135,1305 1667,1260" />
+                  <use xlink:href="#E0A4-heroex" transform="translate(2619, 810) scale(0.72, 0.72)" />
+                  <path d="M2628 838 L2628 1440" stroke-width="18" />
+                  <use xlink:href="#E262-heroex" transform="translate(2433, 810) scale(0.72, 0.72)" />
+                  <use xlink:href="#E0A4-heroex" transform="translate(3309, 990) scale(0.72, 0.72)" />
+                  <path d="M3526 962 L3526 360" stroke-width="18" />
+                  <use xlink:href="#E0A4-heroex" transform="translate(3999, 900) scale(0.72, 0.72)" />
+                  <path d="M4008 928 L4008 1467" stroke-width="18" />
+                  <use xlink:href="#E0A4-heroex" transform="translate(4501, 810) scale(0.72, 0.72)" />
+                  <path d="M4510 838 L4510 1422" stroke-width="18" />
+                  <polygon points="3999,1485 4519,1440 4519,1350 3999,1395" />
+                  <use xlink:href="#E262-heroex" transform="translate(4315, 810) scale(0.72, 0.72)" />
+               </g>
+               <g class="staff">
+                  <path d="M0 2340 L4964 2340" stroke-width="13" />
+                  <path d="M0 2520 L4964 2520" stroke-width="13" />
+                  <path d="M0 2700 L4964 2700" stroke-width="13" />
+                  <path d="M0 2880 L4964 2880" stroke-width="13" />
+                  <path d="M0 3060 L4964 3060" stroke-width="13" />
+                  <use xlink:href="#E062-heroex" transform="translate(117, 2520) scale(0.72, 0.72)" />
+                  <use xlink:href="#E262-heroex" transform="translate(798, 2520) scale(0.72, 0.72)" />
+                  <use xlink:href="#E084-heroex" transform="translate(1105, 2520) scale(0.72, 0.72)" />
+                  <use xlink:href="#E084-heroex" transform="translate(1105, 2880) scale(0.72, 0.72)" />
+                  <path d="M1676 2365 L1676 3480" stroke-width="18" />
+                  <use xlink:href="#E0A3-heroex" transform="translate(1667, 2970) scale(0.72, 0.72)" />
+                  <use xlink:href="#E0A3-heroex" transform="translate(1667, 2610) scale(0.72, 0.72)" />
+                  <use xlink:href="#E0A3-heroex" transform="translate(1667, 2340) scale(0.72, 0.72)" />
+                  <path d="M3318 2095 L3318 3300" stroke-width="18" />
+                  <use xlink:href="#E0A3-heroex" transform="translate(3309, 2700) scale(0.72, 0.72)" />
+                  <use xlink:href="#E0A3-heroex" transform="translate(3309, 2340) scale(0.72, 0.72)" />
+                  <use xlink:href="#E0A3-heroex" transform="translate(3309, 2070) scale(0.72, 0.72)" />
+               </g>
+               <g class="barLine">
+                  <path d="M4951 540 L4951 1260" stroke-width="27" />
+                  <path d="M4951 2340 L4951 3060" stroke-width="27" />
+               </g>
+            </g>
+            <g class="measure">
+               <g class="staff">
+                  <path d="M4964 540 L7797 540" stroke-width="13" />
+                  <path d="M4964 720 L7797 720" stroke-width="13" />
+                  <path d="M4964 900 L7797 900" stroke-width="13" />
+                  <path d="M4964 1080 L7797 1080" stroke-width="13" />
+                  <path d="M4964 1260 L7797 1260" stroke-width="13" />
+                  <use xlink:href="#E0A3-heroex" transform="translate(5144, 720) scale(0.72, 0.72)" />
+                  <path d="M5153 745 L5153 1350" stroke-width="18" />
+                  <use xlink:href="#E0A4-heroex" transform="translate(6194, 630) scale(0.72, 0.72)" />
+                  <path d="M6203 658 L6203 1287" stroke-width="18" />
+                  <use xlink:href="#E0A4-heroex" transform="translate(6644, 540) scale(0.72, 0.72)" />
+                  <path d="M6653 568 L6653 1242" stroke-width="18" />
+                  <polygon points="6194,1305 6662,1260 6662,1170 6194,1215" />
+                  <use xlink:href="#E0A4-heroex" transform="translate(7094, 630) scale(0.72, 0.72)" />
+                  <path d="M7103 658 L7103 1260" stroke-width="18" />
+               </g>
+               <g class="staff">
+                  <path d="M4964 2340 L7797 2340" stroke-width="13" />
+                  <path d="M4964 2520 L7797 2520" stroke-width="13" />
+                  <path d="M4964 2700 L7797 2700" stroke-width="13" />
+                  <path d="M4964 2880 L7797 2880" stroke-width="13" />
+                  <path d="M4964 3060 L7797 3060" stroke-width="13" />
+                  <path d="M6146 2160 L6468 2160" stroke-width="22" />
+                  <path d="M6146 1980 L6468 1980" stroke-width="22" />
+                  <path d="M5153 2365 L5153 3480" stroke-width="18" />
+                  <use xlink:href="#E0A3-heroex" transform="translate(5144, 2970) scale(0.72, 0.72)" />
+                  <use xlink:href="#E0A3-heroex" transform="translate(5144, 2610) scale(0.72, 0.72)" />
+                  <use xlink:href="#E0A3-heroex" transform="translate(5144, 2340) scale(0.72, 0.72)" />
+                  <path d="M6203 2005 L6203 3240" stroke-width="18" />
+                  <use xlink:href="#E0A3-heroex" transform="translate(6194, 2610) scale(0.72, 0.72)" />
+                  <use xlink:href="#E0A3-heroex" transform="translate(6194, 2250) scale(0.72, 0.72)" />
+                  <use xlink:href="#E0A3-heroex" transform="translate(6194, 1980) scale(0.72, 0.72)" />
+               </g>
+               <g class="barLine">
+                  <path d="M7784 540 L7784 1260" stroke-width="27" />
+                  <path d="M7784 2340 L7784 3060" stroke-width="27" />
+               </g>
+            </g>
+            <g class="measure">
+               <g class="staff">
+                  <path d="M7797 540 L10978 540" stroke-width="13" />
+                  <path d="M7797 720 L10978 720" stroke-width="13" />
+                  <path d="M7797 900 L10978 900" stroke-width="13" />
+                  <path d="M7797 1080 L10978 1080" stroke-width="13" />
+                  <path d="M7797 1260 L10978 1260" stroke-width="13" />
+                  <use xlink:href="#E0A4-heroex" transform="translate(8163, 810) scale(0.72, 0.72)" />
+                  <path d="M8172 838 L8172 1440" stroke-width="18" />
+                  <use xlink:href="#E262-heroex" transform="translate(7977, 810) scale(0.72, 0.72)" />
+                  <use xlink:href="#E0A4-heroex" transform="translate(8853, 900) scale(0.72, 0.72)" />
+                  <path d="M9070 872 L9070 333" stroke-width="18" />
+                  <use xlink:href="#E0A4-heroex" transform="translate(9303, 990) scale(0.72, 0.72)" />
+                  <path d="M9520 962 L9520 378" stroke-width="18" />
+                  <polygon points="9061,315 9529,360 9529,450 9061,405" />
+                  <use xlink:href="#E0A3-heroex" transform="translate(9753, 900) scale(0.72, 0.72)" />
+                  <path d="M9762 925 L9762 1500" stroke-width="18" />
+               </g>
+               <g class="barLine">
+                  <path d="M10803 540 L10803 1260" stroke-width="27" />
+                  <path d="M10933 540 L10933 1260" stroke-width="90" />
+               </g>
+            </g>
+         </g>
+      </g>
+   </svg>
+</svg>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="steps-section">
+  <p class="steps-eyebrow">The process</p>
+  <div class="steps-grid">
+    <div class="step-card">
+      <svg width="46" height="34" viewBox="0 0 46 34"><line x1="0" y1="8" x2="46" y2="8" stroke="var(--brass)" stroke-width="1.5"/><line x1="0" y1="16" x2="46" y2="16" stroke="var(--brass)" stroke-width="1.5"/><line x1="0" y1="24" x2="46" y2="24" stroke="var(--brass)" stroke-width="1.5"/><ellipse cx="14" cy="24" rx="5.5" ry="4" fill="var(--brass)"/><line x1="19" y1="24" x2="19" y2="4" stroke="var(--brass)" stroke-width="1.5"/></svg>
+      <h3>Search</h3>
+      <p>Find a piano cover or instrumental of the song on SoundCloud, right from here.</p>
+    </div>
+    <div class="step-card">
+      <svg width="46" height="34" viewBox="0 0 46 34"><line x1="0" y1="8" x2="46" y2="8" stroke="var(--brass)" stroke-width="1.5"/><line x1="0" y1="16" x2="46" y2="16" stroke="var(--brass)" stroke-width="1.5"/><line x1="0" y1="24" x2="46" y2="24" stroke="var(--brass)" stroke-width="1.5"/><ellipse cx="14" cy="16" rx="5.5" ry="4" fill="var(--brass)"/><line x1="19" y1="16" x2="19" y2="2" stroke="var(--brass)" stroke-width="1.5"/></svg>
+      <h3>Separate &amp; transcribe</h3>
+      <p>Drums get filtered out, then every note is picked out of what's left.</p>
+    </div>
+    <div class="step-card">
+      <svg width="46" height="34" viewBox="0 0 46 34"><line x1="0" y1="8" x2="46" y2="8" stroke="var(--brass)" stroke-width="1.5"/><line x1="0" y1="16" x2="46" y2="16" stroke="var(--brass)" stroke-width="1.5"/><line x1="0" y1="24" x2="46" y2="24" stroke="var(--brass)" stroke-width="1.5"/><ellipse cx="14" cy="8" rx="5.5" ry="4" fill="var(--brass)"/><line x1="19" y1="8" x2="19" y2="-8" stroke="var(--brass)" stroke-width="1.5"/></svg>
+      <h3>Listen &amp; choose</h3>
+      <p>Preview Easy, Medium, and Hard before you commit to one.</p>
+    </div>
+    <div class="step-card">
+      <svg width="46" height="34" viewBox="0 0 46 34"><line x1="0" y1="8" x2="46" y2="8" stroke="var(--brass)" stroke-width="1.5"/><line x1="0" y1="16" x2="46" y2="16" stroke="var(--brass)" stroke-width="1.5"/><line x1="0" y1="24" x2="46" y2="24" stroke="var(--brass)" stroke-width="1.5"/><ellipse cx="14" cy="0" rx="5.5" ry="4" fill="var(--brass)"/><line x1="19" y1="0" x2="19" y2="-16" stroke="var(--brass)" stroke-width="1.5"/></svg>
+      <h3>Play from the page</h3>
+      <p>Adjust the notation your way, then download a clean PDF.</p>
+    </div>
+  </div>
+</section>
+
+<main id="app">
+  <div class="panel">
+    <div class="source-tabs">
+      <button id="tab-search" class="active">Search a song</button>
+      <button id="tab-link">Paste a link</button>
+      <button id="tab-file">Upload audio file</button>
+    </div>
+
+    <div id="pane-search" class="source-pane active">
+      <input type="text" id="search-query" placeholder="e.g. Perfect Ed Sheeran piano instrumental">
+      <button class="go" id="search-btn" style="margin-top:0.6rem;">Search</button>
+      <p class="warning">Searches SoundCloud, where independent musicians post piano covers and instrumental versions of popular songs.</p>
+      <div id="search-results"></div>
+    </div>
+    <div id="pane-link" class="source-pane">
+      <input type="text" id="source-url" placeholder="https://soundcloud.com/... or a YouTube URL">
+      <p class="warning">
+        SoundCloud links work reliably from this server. YouTube links usually get blocked
+        by a bot-check here — if that happens, run this on your own computer instead, then
+        switch to "Upload audio file": <code>yt-dlp -x --audio-format wav "&lt;url&gt;"</code>
+      </p>
+    </div>
+    <div id="pane-file" class="source-pane">
+      <input type="file" id="audio-file" accept="audio/*,.mp3,.wav,.m4a">
+    </div>
+
+    <button class="go" id="transcribe-btn" style="margin-top:0.9rem;">Transcribe</button>
+    <p id="status-line"></p>
+  </div>
+
+  <div class="panel" id="listen-panel" style="display:none;">
+    <h3 style="margin:0 0 0.9rem; font-family: var(--font-display); font-weight:600;">Listen before you pick a difficulty</h3>
+    <div class="listen-row">
+      <span class="listen-label">Easy</span>
+      <midi-player id="player-easy" sound-font></midi-player>
+    </div>
+    <div class="listen-row">
+      <span class="listen-label">Medium</span>
+      <midi-player id="player-medium" sound-font></midi-player>
+    </div>
+    <div class="listen-row">
+      <span class="listen-label">Hard</span>
+      <midi-player id="player-hard" sound-font></midi-player>
+    </div>
+    <p class="warning">Playback tempo is an estimate (transcription doesn't preserve the original song's exact tempo) — it's here to compare complexity between difficulty levels, not to match the recording.</p>
+  </div>
+
+  <div class="panel" id="controls-panel" style="display:none;">
+    <div class="controls-row">
+      <div class="control-group">
+        <label for="difficulty">Difficulty</label>
+        <select id="difficulty">
+          <option value="easy">Easy — melody + simple bass</option>
+          <option value="medium" selected>Medium — melody + chords</option>
+          <option value="hard">Hard — closest to the recording</option>
+        </select>
+      </div>
+      <div class="control-group">
+        <label for="accidental-mode">Accidentals</label>
+        <select id="accidental-mode">
+          <option value="original" selected>As transcribed</option>
+          <option value="sharps">All sharps</option>
+          <option value="flats">All flats</option>
+        </select>
+      </div>
+      <div class="control-group checkbox-row">
+        <input type="checkbox" id="show-note-names">
+        <label for="show-note-names" style="margin:0; text-transform:none; letter-spacing:0; font-family:var(--font-body); font-size:0.88rem;">Label note letters</label>
+      </div>
+      <button class="go" id="rerender-btn">Update sheet music</button>
+    </div>
+  </div>
+
+  <div class="panel" id="preview-panel" style="display:none;">
+    <div id="preview"></div>
+    <a id="download-link" class="download-btn" href="#" style="display:none;">Download PDF</a>
+  </div>
+</main>
+
+<footer>
+  Search via SoundCloud · Source separation by Demucs · Transcription by Basic Pitch<br>
+  Arranged with music21 · Engraved with Verovio
+</footer>
+
+<script>
+let currentJobId = null;
+
+const TABS = ["search", "link", "file"];
+TABS.forEach(t => document.getElementById(`tab-${t}`).addEventListener("click", () => switchTab(t)));
+
+let selectedTrackUrl = null;
+
+function switchTab(which) {
+  TABS.forEach(t => {
+    document.getElementById(`tab-${t}`).classList.toggle("active", t === which);
+    document.getElementById(`pane-${t}`).classList.toggle("active", t === which);
+  });
+}
+
+document.getElementById("search-btn").addEventListener("click", async () => {
+  const query = document.getElementById("search-query").value.trim();
+  const resultsEl = document.getElementById("search-results");
+  if (!query) return;
+  resultsEl.innerHTML = "<p class='warning'>Searching…</p>";
+  selectedTrackUrl = null;
+
+  const res = await fetch(`/api/search?q=${encodeURIComponent(query)}`);
+  const data = await res.json();
+  if (data.error) {
+    resultsEl.innerHTML = `<p class='warning'>Error: ${data.error}</p>`;
+    return;
+  }
+  if (!data.results.length) {
+    resultsEl.innerHTML = "<p class='warning'>No results. Try a different search.</p>";
+    return;
+  }
+  resultsEl.innerHTML = data.results.map((r, i) => {
+    const mins = Math.floor(r.duration / 60), secs = String(Math.floor(r.duration % 60)).padStart(2, "0");
+    return `<div class="search-result" data-idx="${i}" data-url="${r.url}">
+      <div><strong>${r.title}</strong></div>
+      <div class="warning">${r.uploader} · ${mins}:${secs}</div>
+    </div>`;
+  }).join("");
+  resultsEl.dataset.results = JSON.stringify(data.results);
+
+  resultsEl.querySelectorAll(".search-result").forEach(el => {
+    el.addEventListener("click", () => {
+      resultsEl.querySelectorAll(".search-result").forEach(x => x.classList.remove("selected"));
+      el.classList.add("selected");
+      selectedTrackUrl = el.dataset.url;
+    });
+  });
+});
+
+document.getElementById("transcribe-btn").addEventListener("click", async () => {
+  const statusLine = document.getElementById("status-line");
+  const activeTab = TABS.find(t => document.getElementById(`tab-${t}`).classList.contains("active"));
+  const formData = new FormData();
+
+  if (activeTab === "file") {
+    const fileInput = document.getElementById("audio-file");
+    if (!fileInput.files.length) { statusLine.textContent = "Choose an audio file first."; return; }
+    formData.append("file", fileInput.files[0]);
+  } else if (activeTab === "search") {
+    if (!selectedTrackUrl) { statusLine.textContent = "Search and pick a track first."; return; }
+    formData.append("source_url", selectedTrackUrl);
+  } else {
+    const url = document.getElementById("source-url").value.trim();
+    if (!url) { statusLine.textContent = "Paste a link first."; return; }
+    formData.append("source_url", url);
+  }
+
+  document.getElementById("transcribe-btn").disabled = true;
+  statusLine.textContent = "Uploading…";
+
+  const res = await fetch("/api/transcribe", { method: "POST", body: formData });
+  const data = await res.json();
+  if (data.error) {
+    statusLine.textContent = "Error: " + data.error;
+    document.getElementById("transcribe-btn").disabled = false;
+    return;
+  }
+  currentJobId = data.job_id;
+  pollStatus();
+});
+
+async function pollStatus() {
+  const statusLine = document.getElementById("status-line");
+  const res = await fetch(`/api/status/${currentJobId}`);
+  const data = await res.json();
+
+  if (data.status === "done") {
+    statusLine.textContent = "Transcription complete.";
+    document.getElementById("transcribe-btn").disabled = false;
+    document.getElementById("controls-panel").style.display = "block";
+    document.getElementById("listen-panel").style.display = "block";
+    ["easy", "medium", "hard"].forEach(diff => {
+      document.getElementById(`player-${diff}`).src = `/api/preview/${currentJobId}/${diff}`;
+    });
+    await rerender();
+  } else if (data.status === "error") {
+    statusLine.textContent = "Error: " + data.error;
+    document.getElementById("transcribe-btn").disabled = false;
+  } else {
+    statusLine.textContent = "Status: " + data.status + "…";
+    setTimeout(pollStatus, 1500);
+  }
+}
+
+document.getElementById("rerender-btn").addEventListener("click", rerender);
+
+async function rerender() {
+  if (!currentJobId) return;
+  const statusLine = document.getElementById("status-line");
+  statusLine.textContent = "Rendering sheet music…";
+
+  const formData = new FormData();
+  formData.append("difficulty", document.getElementById("difficulty").value);
+  formData.append("accidental_mode", document.getElementById("accidental-mode").value);
+  formData.append("show_note_names", document.getElementById("show-note-names").checked);
+
+  const res = await fetch(`/api/render/${currentJobId}`, { method: "POST", body: formData });
+  const data = await res.json();
+  if (data.error) {
+    statusLine.textContent = "Error: " + data.error;
+    return;
+  }
+
+  document.getElementById("preview-panel").style.display = "block";
+  document.getElementById("preview").innerHTML = data.svg;
+  const link = document.getElementById("download-link");
+  link.href = data.pdf_url;
+  link.style.display = "inline-block";
+  statusLine.textContent = `Rendered ${data.pages} page(s).`;
+}
+</script>
+
+</body>
+</html>
