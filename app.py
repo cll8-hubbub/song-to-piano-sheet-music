@@ -36,6 +36,25 @@ def save_job_meta(job_id: str):
         json.dump(meta, f)
 
 
+def find_existing_job_by_source(identity_key: str) -> str | None:
+    """Looks for a prior job with the same source link, so re-transcribing
+    a song you already have (maybe at a different difficulty) reuses that
+    same library entry instead of creating a duplicate folder."""
+    if not identity_key:
+        return None
+    for meta_path in JOBS_DIR.glob("*/meta.json"):
+        try:
+            with open(meta_path) as f:
+                meta = json.load(f)
+        except (json.JSONDecodeError, OSError):
+            continue
+        if identity_key in (meta.get("webpage_url"), meta.get("source_url")):
+            jid = meta.get("job_id")
+            if jid and (JOBS_DIR / jid / "transcribed.mid").exists():
+                return jid
+    return None
+
+
 def ensure_job_loaded(job_id: str) -> bool:
     """True if the job is ready to render. Reconstructs from the saved MIDI
     (fast) rather than re-running the slow audio pipeline, so a library
@@ -143,10 +162,18 @@ async def transcribe(
     source_webpage_url: str = Form(default=""),
     file: UploadFile | None = File(default=None),
 ):
+    is_file_upload = file is not None and file.filename
+
+    if not is_file_upload and source_url.strip():
+        identity_key = source_webpage_url.strip() or source_url.strip()
+        existing_job_id = find_existing_job_by_source(identity_key)
+        if existing_job_id:
+            return {"job_id": existing_job_id, "reused": True}
+
     job_id = str(uuid.uuid4())
     d = job_dir(job_id)
 
-    if file is not None and file.filename:
+    if is_file_upload:
         upload_path = d / f"upload_{file.filename}"
         with open(upload_path, "wb") as f:
             shutil.copyfileobj(file.file, f)
@@ -164,6 +191,7 @@ async def transcribe(
             "title": source_title.strip() or default_title,
             "uploader": source_uploader.strip() or None,
             "webpage_url": source_webpage_url.strip() or None,
+            "source_url": source_url.strip() if source_type == "url" else None,
             "created_at": datetime.utcnow().isoformat() + "Z",
         },
     }
@@ -171,6 +199,15 @@ async def transcribe(
     thread = threading.Thread(target=run_pipeline, args=(job_id, source_type, source_value))
     thread.start()
     return {"job_id": job_id}
+
+
+@app.post("/api/rename/{job_id}")
+async def rename(job_id: str, title: str = Form(...)):
+    if not ensure_job_loaded(job_id):
+        return JSONResponse({"error": "unknown job"}, status_code=404)
+    jobs[job_id]["meta"]["title"] = title.strip() or "Untitled"
+    save_job_meta(job_id)
+    return {"title": jobs[job_id]["meta"]["title"]}
 
 
 @app.get("/api/status/{job_id}")

@@ -44,7 +44,7 @@
     color: var(--ivory);
     padding: 4.5rem 1.5rem 3.5rem;
   }
-  .hero-inner { max-width: 1080px; margin: 0 auto; display: grid; grid-template-columns: 1.1fr 1fr; gap: 2.5rem; align-items: center; }
+  .hero-inner { max-width: 1320px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1.3fr; gap: 2.5rem; align-items: center; }
   .hero-eyebrow {
     font-family: var(--font-mono); font-size: 0.72rem; letter-spacing: 0.16em; text-transform: uppercase;
     color: var(--brass-bright); margin: 0 0 1.1rem;
@@ -66,7 +66,7 @@
   .hero-visual { position: relative; }
   #hero-excerpt-wrap {
     background: linear-gradient(160deg, #1a1512, #0f0c0a);
-    border: 1px solid #3a2f22; border-radius: 4px; padding: 2.6rem 1.4rem;
+    border: 1px solid #3a2f22; border-radius: 4px; padding: 1.8rem 1.6rem;
     box-shadow: 0 30px 60px -20px rgba(0,0,0,0.6);
     transform: rotate(-1.4deg);
   }
@@ -400,6 +400,14 @@
       <input type="file" id="audio-file" accept="audio/*,.mp3,.wav,.m4a">
     </div>
 
+    <div class="control-group" style="margin-top:0.9rem;">
+      <label for="song-title">Song title</label>
+      <div style="display:flex; gap:0.5rem;">
+        <input type="text" id="song-title" placeholder="Suggested title will appear here — edit as you like" style="flex:1;">
+        <button class="go" id="save-title-btn" style="margin-top:0; display:none;">Save title</button>
+      </div>
+    </div>
+
     <button class="go" id="transcribe-btn" style="margin-top:0.9rem;">Transcribe</button>
     <p id="status-line"></p>
   </div>
@@ -504,8 +512,15 @@ document.getElementById("search-btn").addEventListener("click", async () => {
       resultsEl.querySelectorAll(".search-result").forEach(x => x.classList.remove("selected"));
       el.classList.add("selected");
       selectedTrack = data.results[parseInt(el.dataset.idx, 10)];
+      document.getElementById("song-title").value = selectedTrack.title || "";
     });
   });
+});
+
+document.getElementById("audio-file").addEventListener("change", (e) => {
+  if (e.target.files.length) {
+    document.getElementById("song-title").value = e.target.files[0].name.replace(/\.[^/.]+$/, "");
+  }
 });
 
 document.getElementById("transcribe-btn").addEventListener("click", async () => {
@@ -513,20 +528,24 @@ document.getElementById("transcribe-btn").addEventListener("click", async () => 
   const activeTab = TABS.find(t => document.getElementById(`tab-${t}`).classList.contains("active"));
   const formData = new FormData();
 
+  const titleInput = document.getElementById("song-title").value.trim();
+
   if (activeTab === "file") {
     const fileInput = document.getElementById("audio-file");
     if (!fileInput.files.length) { statusLine.textContent = "Choose an audio file first."; return; }
     formData.append("file", fileInput.files[0]);
+    formData.append("source_title", titleInput);
   } else if (activeTab === "search") {
     if (!selectedTrack) { statusLine.textContent = "Search and pick a track first."; return; }
     formData.append("source_url", selectedTrack.url);
-    formData.append("source_title", selectedTrack.title || "");
+    formData.append("source_title", titleInput || selectedTrack.title || "");
     formData.append("source_uploader", selectedTrack.uploader || "");
     formData.append("source_webpage_url", selectedTrack.webpage_url || "");
   } else {
     const url = document.getElementById("source-url").value.trim();
     if (!url) { statusLine.textContent = "Paste a link first."; return; }
     formData.append("source_url", url);
+    formData.append("source_title", titleInput);
   }
 
   document.getElementById("transcribe-btn").disabled = true;
@@ -537,6 +556,12 @@ document.getElementById("transcribe-btn").addEventListener("click", async () => 
   if (data.error) {
     statusLine.textContent = "Error: " + data.error;
     document.getElementById("transcribe-btn").disabled = false;
+    return;
+  }
+  document.getElementById("transcribe-btn").disabled = false;
+  if (data.reused) {
+    statusLine.textContent = "You already have this song — reusing it from your library.";
+    await activateJob(data.job_id);
     return;
   }
   currentJobId = data.job_id;
@@ -611,7 +636,20 @@ async function rerender() {
   link.href = data.pdf_url;
   link.style.display = "inline-block";
   statusLine.textContent = `Rendered ${data.pages} page(s).`;
+
+  document.getElementById("song-title").value = data.title;
+  document.getElementById("save-title-btn").style.display = "inline-block";
 }
+
+document.getElementById("save-title-btn").addEventListener("click", async () => {
+  if (!currentJobId) return;
+  const title = document.getElementById("song-title").value.trim();
+  const formData = new FormData();
+  formData.append("title", title);
+  await fetch(`api/rename/${currentJobId}`, { method: "POST", body: formData });
+  await rerender();
+  loadLibrary();
+});
 
 async function loadLibrary() {
   const listEl = document.getElementById("library-list");
